@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pantau Polinasi Sawit</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F4520">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #EEF0E4;
+    --paper: #F8F9F1;
+    --ink: #1E2B18;
+    --ink-soft: #55624C;
+    --line: #D8DCC8;
+    --palm: #2F5E2A;
+    --palm-dark: #1F4520;
+    --palm-light: #6C9A5C;
+    --fruit: #C1440E;
+    --fruit-dark: #8F3009;
+    --gold: #D9A441;
+    --danger: #A6291D;
+    --danger-bg: #FBE7E2;
+    --gold-bg: #FBF1DD;
+    --ok-bg: #E7F0DF;
+    --shadow: 0 8px 24px rgba(30,43,24,0.12);
+    --radius: 14px;
+    font-family: -apple-system, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 100% 0%, #E4E9D4 0%, transparent 45%),
+      var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;}
+
+  /* ===== Top bar ===== */
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 28px;
+    background:linear-gradient(135deg, var(--palm-dark), var(--palm));
+    color:#F3F4E8;
+    position:sticky;
+    top:0;
+    z-index:30;
+    box-shadow: var(--shadow);
+  }
+  .brand{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .brand svg{width:34px;height:34px;flex-shrink:0;}
+  .brand h1{font-size:18px; margin:0; letter-spacing:.2px;}
+  .brand .sub{font-size:12px; opacity:.8; margin-top:2px;}
+  .today-chip{
+    font-size:12px; background:rgba(255,255,255,.14); padding:6px 12px;
+    border-radius:999px; margin-left:14px;
+  }
+  .header-right{display:flex; align-items:center; gap:16px;}
+
+  /* ===== Bell / notification dropdown ===== */
+  .bell-wrap{position:relative;}
+  .bell-btn{
+    background:rgba(255,255,255,.14); border:none; width:40px; height:40px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative;
+    color:#F3F4E8; transition:background .15s;
+  }
+  .bell-btn:hover{background:rgba(255,255,255,.25);}
+  .bell-badge{
+    position:absolute; top:-2px; right:-2px; background:var(--fruit); color:#fff;
+    font-size:10px; font-weight:700; min-width:18px; height:18px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center; padding:0 4px;
+    border:2px solid var(--palm-dark);
+  }
+  .bell-panel{
+    position:absolute; right:0; top:50px; width:360px; max-height:480px; overflow-y:auto;
+    background:var(--paper); color:var(--ink); border-radius:var(--radius); box-shadow:var(--shadow);
+    display:none; flex-direction:column; border:1px solid var(--line);
+  }
+  .bell-panel.open{display:flex;}
+  .bell-panel .bp-head{
+    padding:14px 16px; font-weight:700; border-bottom:1px solid var(--line); font-size:14px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .bp-head span.count{font-weight:400; color:var(--ink-soft); font-size:12px;}
+  .notif-item{
+    display:flex; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); cursor:default;
+  }
+  .notif-item:last-child{border-bottom:none;}
+  .notif-dot{
+    width:38px;height:38px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center; font-size:16px; color:#fff; font-weight:700;
+  }
+  .notif-body{flex:1; min-width:0;}
+  .notif-title{font-size:13px; font-weight:700; margin-bottom:2px; display:flex; justify-content:space-between; gap:6px;}
+  .notif-title .time{font-weight:400; color:var(--ink-soft); font-size:11px; white-space:nowrap;}
+  .notif-msg{font-size:12.5px; color:var(--ink-soft); line-height:1.4;}
+  .empty-notif{padding:30px 16px; text-align:center; color:var(--ink-soft); font-size:13px;}
+
+  /* severity colors */
+  .sev-overdue{background:var(--danger);}
+  .sev-today{background:var(--fruit);}
+  .sev-soon{background:var(--gold);}
+  .sev-ready{background:var(--palm);}
+
+  /* ===== Layout ===== */
+  main{max-width:1280px; margin:0 auto; padding:24px 28px 80px;}
+
+  .upload-card{
+    background:var(--paper); border:1.5px dashed var(--palm-light); border-radius:var(--radius);
+    padding:26px; display:flex; align-items:center; gap:22px; box-shadow:var(--shadow);
+    flex-wrap:wrap;
+  }
+  .upload-card .icon{
+    width:52px;height:52px; border-radius:12px; background:var(--ok-bg); color:var(--palm);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .upload-card h2{margin:0 0 4px; font-size:16px;}
+  .upload-card p{margin:0; font-size:13px; color:var(--ink-soft);}
+  .upload-card .cols-note{font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5;}
+  .upload-actions{display:flex; gap:10px; margin-left:auto; flex-wrap:wrap;}
+  input[type=file]{display:none;}
+  .btn{
+    border:none; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600;
+    cursor:pointer; transition:transform .1s, box-shadow .15s; display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--palm); color:#fff;}
+  .btn-primary:hover{background:var(--palm-dark);}
+  .btn-ghost{background:transparent; color:var(--palm); border:1.5px solid var(--palm-light);}
+  .btn-ghost:hover{background:var(--ok-bg);}
+  .btn-sm{padding:6px 10px; font-size:11.5px; border-radius:8px;}
+
+  .file-status{font-size:12.5px; margin-top:14px; color:var(--ink-soft);}
+  .file-status.err{color:var(--danger);}
+
+  /* ===== Stat cards ===== */
+  .stats{
+    display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin:22px 0;
+  }
+  .stat-card{
+    background:var(--paper); border-radius:var(--radius); padding:16px 16px 14px; box-shadow:var(--shadow);
+    border-left:4px solid var(--line);
+  }
+  .stat-card .num{font-size:26px; font-weight:800; font-family:"SFMono-Regular",Consolas,monospace;}
+  .stat-card .lbl{font-size:11.5px; color:var(--ink-soft); margin-top:2px; letter-spacing:.2px;}
+  .stat-card.c-total{border-left-color:var(--ink-soft);}
+  .stat-card.c-wait1{border-left-color:var(--gold);}
+  .stat-card.c-wait2{border-left-color:var(--fruit);}
+  .stat-card.c-ripen{border-left-color:var(--palm-light);}
+  .stat-card.c-ready{border-left-color:var(--palm);}
+
+  /* ===== Toolbar ===== */
+  .toolbar{
+    display:flex; gap:10px; align-items:center; margin:24px 0 12px; flex-wrap:wrap;
+  }
+  .toolbar input[type=text]{
+    flex:1; min-width:180px; padding:10px 14px; border-radius:10px; border:1px solid var(--line);
+    background:var(--paper); font-size:13px; color:var(--ink);
+  }
+  select{
+    padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--paper);
+    font-size:13px; color:var(--ink);
+  }
+
+  /* ===== Table ===== */
+  .table-wrap{
+    background:var(--paper); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden;
+  }
+  table{width:100%; border-collapse:collapse; font-size:12.8px;}
+  thead th{
+    text-align:left; padding:12px 12px; background:#EEF1E2; color:var(--ink-soft);
+    font-size:11px; text-transform:uppercase; letter-spacing:.4px; position:sticky; top:0;
+    border-bottom:1px solid var(--line);
+  }
+  tbody td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#F2F4E8;}
+
+  .badge{
+    display:inline-block; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700;
+    white-space:nowrap;
+  }
+  .badge-wait1{background:var(--gold-bg); color:#8A6415;}
+  .badge-wait2{background:#FDEBE0; color:var(--fruit-dark);}
+  .badge-ripen{background:#E5EEDD; color:var(--palm-dark);}
+  .badge-ready{background:var(--ok-bg); color:var(--palm-dark); box-shadow: inset 0 0 0 1.5px var(--palm-light);}
+
+  .deadline-tag{font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap;}
+  .dl-overdue{background:var(--danger-bg); color:var(--danger);}
+  .dl-today{background:#FDEBE0; color:var(--fruit-dark);}
+  .dl-soon{background:var(--gold-bg); color:#8A6415;}
+  .dl-fine{color:var(--ink-soft);}
+
+  /* ripening progress bar - signature element */
+  .ripebar{display:flex; gap:2px; width:80px;}
+  .ripebar .seg{flex:1; height:7px; border-radius:3px; background:#E1E4D2;}
+  .ripebar .seg.on{background:var(--palm);}
+  .ripebar .seg.on.current{background:var(--gold);}
+
+  .empty-state{padding:60px 20px; text-align:center; color:var(--ink-soft);}
+  .empty-state svg{width:56px;height:56px; margin-bottom:12px; opacity:.5;}
+
+  /* ===== Toast (WhatsApp-style popups) ===== */
+  #toast-stack{
+    position:fixed; bottom:22px; right:22px; display:flex; flex-direction:column; gap:10px; z-index:50;
+    width:320px;
+  }
+  .toast{
+    background:var(--paper); border-radius:14px; box-shadow:var(--shadow); padding:12px 14px;
+    display:flex; gap:10px; align-items:flex-start; border-left:4px solid var(--palm);
+    animation: slideIn .28s ease-out;
+    cursor:pointer;
+  }
+  .toast.leaving{animation: slideOut .25s ease-in forwards;}
+  @keyframes slideIn{from{transform:translateX(120%); opacity:0;} to{transform:translateX(0); opacity:1;}}
+  @keyframes slideOut{to{transform:translateX(120%); opacity:0;}}
+  .toast .t-icon{
+    width:36px;height:36px;border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:15px;
+  }
+  .toast .t-body{flex:1; min-width:0;}
+  .toast .t-title{font-size:12.5px; font-weight:700; margin-bottom:2px;}
+  .toast .t-msg{font-size:12px; color:var(--ink-soft); line-height:1.35;}
+  .toast .t-close{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; line-height:1;}
+
+  @media (max-width: 900px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    main{padding:18px;}
+    .table-wrap{overflow-x:auto;}
+    table{min-width:1240px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 22V13" stroke="#F3F4E8" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M12 13C12 13 4 12 4 4C11 4 12 13 12 13Z" fill="#8CBB6E" stroke="#F3F4E8" stroke-width="1"/>
+      <path d="M12 13C12 13 20 12 20 4C13 4 12 13 12 13Z" fill="#6C9A5C" stroke="#F3F4E8" stroke-width="1"/>
+      <circle cx="12" cy="19" r="2.4" fill="#C1440E"/>
+    </svg>
+    <div>
+      <h1>Pantau Polinasi Sawit</h1>
+      <div class="sub">Bungkus &rarr; Serbuk (9 hr) &rarr; Buka (15 hr) &rarr; Panen (150 hr)</div>
+    </div>
+    <div class="today-chip mono" id="today-chip"></div>
+  </div>
+  <div class="header-right">
+    <div class="bell-wrap">
+      <button class="bell-btn" id="bell-btn" title="Notifikasi">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.7 21a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="bell-badge" id="bell-badge" style="display:none;">0</span>
+      </button>
+      <div class="bell-panel" id="bell-panel">
+        <div class="bp-head"><span>Notifikasi</span><span class="count" id="bp-count">0 item</span></div>
+        <div id="notif-list"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="upload-card">
+    <div class="icon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div>
+      <h2>Unggah data polinasi (.xlsx / .xls / .csv)</h2>
+      <p>Kolom wajib: Pos, Barang, ID Persil, ID Betina, Lapangan, Kel Betina, Tgl Register (= tanggal bungkus), PoliRegister, ID Lokasi.</p>
+      <div class="cols-note">Kolom tanggal input/upload (yang nilainya sama di semua baris) otomatis diabaikan. Jika file Anda sudah punya kolom <b>Tgl Penyerbukan</b> / <b>Tgl Buka Bungkus</b>, sistem akan memakainya otomatis &mdash; kalau belum ada, gunakan tombol "Tandai" di tabel untuk mencatat tanggal aktualnya. Halaman ini sudah terisi 5 pokok dari data contoh, unggah file kapan saja untuk menggantinya.</div>
+      <div class="cols-note" id="notif-note" style="margin-top:6px;">Klik "Aktifkan Notifikasi HP" supaya tenggat yang lewat/hari-ini muncul sebagai notifikasi asli di HP, bukan cuma popup di halaman ini.</div>
+      <div class="file-status" id="file-status">Belum ada file diunggah.</div>
+    </div>
+    <div class="upload-actions">
+      <label class="btn btn-primary" for="file-input">Pilih File</label>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
+      <button class="btn btn-ghost" id="btn-notif">Aktifkan Notifikasi HP</button>
+      <button class="btn btn-ghost" id="btn-sample">Muat Data Contoh</button>
+      <button class="btn btn-ghost" id="btn-template">Unduh Template</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats" style="display:none;">
+    <div class="stat-card c-total"><div class="num" id="s-total">0</div><div class="lbl">TOTAL POKOK</div></div>
+    <div class="stat-card c-wait1"><div class="num" id="s-wait1">0</div><div class="lbl">MENUNGGU PENYERBUKAN</div></div>
+    <div class="stat-card c-wait2"><div class="num" id="s-wait2">0</div><div class="lbl">MENUNGGU BUKA BUNGKUS</div></div>
+    <div class="stat-card c-ripen"><div class="num" id="s-ripen">0</div><div class="lbl">PROSES PEMATANGAN</div></div>
+    <div class="stat-card c-ready"><div class="num" id="s-ready">0</div><div class="lbl">SIAP PANEN</div></div>
+  </div>
+
+  <div class="toolbar" id="toolbar" style="display:none;">
+    <input type="text" id="search-box" placeholder="Cari pos, id betina, id persil, polinator...">
+    <select id="filter-status">
+      <option value="">Semua status</option>
+      <option value="Menunggu Penyerbukan">Menunggu Penyerbukan</option>
+      <option value="Menunggu Buka Bungkus">Menunggu Buka Bungkus</option>
+      <option value="Proses Pematangan">Proses Pematangan</option>
+      <option value="Siap Panen">Siap Panen</option>
+    </select>
+    <select id="filter-urgent">
+      <option value="">Semua tenggat</option>
+      <option value="overdue">Terlambat</option>
+      <option value="today">Jatuh tempo hari ini</option>
+      <option value="soon">H-3 s/d H-1</option>
+    </select>
+  </div>
+
+  <div class="table-wrap" id="table-wrap" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Pos</th>
+          <th>ID Betina</th>
+          <th>Barang</th>
+          <th>ID Persil</th>
+          <th>Lapangan</th>
+          <th>Kel Betina</th>
+          <th>Polinator</th>
+          <th>Tgl Bungkus</th>
+          <th>Status</th>
+          <th>Tenggat</th>
+          <th>Progress</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" id="empty-state">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3M12 4v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div>Unggah file Excel data polinasi untuk mulai memantau tenggat waktu.</div>
+  </div>
+</main>
+
+<div id="toast-stack"></div>
+
+<script>
+// ================= CONFIG =================
+const HARI_KE_SERBUK = 9;   // batas Bungkus -> Penyerbukan
+const HARI_KE_BUKA = 15;    // batas Penyerbukan -> Buka Bungkus
+const HARI_KE_PANEN = 150;  // Buka Bungkus -> estimasi Panen
+const TOAST_AUTOCLOSE_MS = 9000;
+const MAX_TOASTS_ON_LOAD = 5;
+
+const today = new Date();
+today.setHours(0,0,0,0);
+
+document.getElementById('today-chip').textContent = 'Hari ini: ' + fmtDate(today);
+
+let dataset = []; // processed rows
+let notifQueue = []; // {sev, title, msg, time}
+
+// ================= HELPERS =================
+function fmtDate(d){
+  if(!d) return '-';
+  return d.toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'});
+}
+function addDays(d, n){
+  const r = new Date(d);
+  r.setDate(r.getDate()+n);
+  r.setHours(0,0,0,0);
+  return r;
+}
+function diffDays(a,b){
+  return Math.round((a - b) / 86400000);
+}
+function toDateSafe(v){
+  if(!v && v !== 0) return null;
+  if(v instanceof Date && !isNaN(v)) { const d=new Date(v); d.setHours(0,0,0,0); return d; }
+  if(typeof v === 'number'){
+    const d = XLSX.SSF.parse_date_code(v);
+    if(!d) return null;
+    const jd = new Date(d.y, d.m-1, d.d);
+    jd.setHours(0,0,0,0);
+    return jd;
+  }
+  if(typeof v === 'string'){
+    const s = v.trim();
+    if(!s) return null;
+    let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if(m){
+      let [_, dd, mm, yy] = m;
+      yy = yy.length===2 ? '20'+yy : yy;
+      const d = new Date(+yy, +mm-1, +dd);
+      d.setHours(0,0,0,0);
+      return isNaN(d) ? null : d;
+    }
+    const d = new Date(s);
+    if(!isNaN(d)){ d.setHours(0,0,0,0); return d; }
+    return null;
+  }
+  return null;
+}
+
+// Header asli file Anda: Pos | Barang | ID Persil | ID Betina | Lapangan |
+// Kel Betina | Tgl Register (=tgl bungkus) | (tgl input, diabaikan) | (angka, diabaikan) | PoliRegister | ID Lokasi
+const HEADER_MAP = {
+  "pos":"pos_blok",
+  "barang":"varietas",
+  "idpersil":"register",
+  "idbetina":"no_pohon",
+  "lapangan":"lapangan",
+  "kelbetina":"kel_betina",
+  "tglregister":"tgl_bungkus",
+  "tglbungkus":"tgl_bungkus",
+  "poliregister":"polinator",
+  "poliregiste":"polinator",
+  "idlokasi":"letak",
+  // opsional, dipakai otomatis kalau suatu saat kolom ini ada di file:
+  "tglpenyerbukan":"tgl_penyerbukan",
+  "tanggalpenyerbukan":"tgl_penyerbukan",
+  "tglpolinasi":"tgl_penyerbukan",
+  "tglserbuk":"tgl_penyerbukan",
+  "tglbukabungkus":"tgl_buka_bungkus",
+  "tanggalbukabungkus":"tgl_buka_bungkus",
+  "tglbuka":"tgl_buka_bungkus",
+};
+function normHeader(h){
+  return String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+
+// ================= DERIVED FIELDS (dipakai saat load & saat update manual) =================
+function computeDerived(row){
+  const tglBungkus = row.tgl_bungkus;
+  const deadlineServuk = addDays(tglBungkus, HARI_KE_SERBUK);
+  const actualServuk = row.tgl_penyerbukan || null;
+  const baseForBuka = actualServuk || deadlineServuk;
+  const deadlineBuka = addDays(baseForBuka, HARI_KE_BUKA);
+  const actualBuka = row.tgl_buka_bungkus || null;
+  const basePanen = actualBuka || deadlineBuka;
+  const tglPanenEstimasi = addDays(basePanen, HARI_KE_PANEN);
+
+  let status, activeDeadline, activeLabel;
+  if(actualBuka){
+    status = today >= tglPanenEstimasi ? 'Siap Panen' : 'Proses Pematangan';
+    activeDeadline = tglPanenEstimasi;
+    activeLabel = 'Estimasi Panen';
+  } else if(actualServuk){
+    status = 'Menunggu Buka Bungkus';
+    activeDeadline = deadlineBuka;
+    activeLabel = 'Batas Buka Bungkus';
+  } else {
+    status = 'Menunggu Penyerbukan';
+    activeDeadline = deadlineServuk;
+    activeLabel = 'Batas Penyerbukan';
+  }
+
+  return {
+    deadline_serbuk: deadlineServuk,
+    deadline_buka: deadlineBuka,
+    tgl_panen_estimasi: tglPanenEstimasi,
+    status_tahap: status,
+    active_deadline: activeDeadline,
+    active_label: activeLabel,
+    d_diff: diffDays(activeDeadline, today),
+  };
+}
+
+function processRow(raw){
+  const tglBungkus = toDateSafe(raw.tgl_bungkus);
+  if(!tglBungkus) return null; // wajib ada tgl bungkus
+
+  const row = {
+    pos_blok: raw.pos_blok || '-',
+    varietas: raw.varietas || '-',
+    register: raw.register || '-',
+    no_pohon: raw.no_pohon || '-',
+    lapangan: raw.lapangan || '-',
+    kel_betina: raw.kel_betina || '-',
+    polinator: raw.polinator || '-',
+    letak: raw.letak || '-',
+    tgl_bungkus: tglBungkus,
+    tgl_penyerbukan: toDateSafe(raw.tgl_penyerbukan),
+    tgl_buka_bungkus: toDateSafe(raw.tgl_buka_bungkus),
+  };
+  row._id = [row.pos_blok, row.no_pohon, row.register, tglBungkus.getTime()].join('|');
+  Object.assign(row, computeDerived(row));
+  return row;
+}
+
+function recomputeRow(row){
+  Object.assign(row, computeDerived(row));
+}
+
+// ================= PWA: SERVICE WORKER + NOTIFIKASI HP =================
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+const DB_NAME='polinasiDB', STORE_ROWS='rows', STORE_NOTIFIED='notified';
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(STORE_ROWS)) db.createObjectStore(STORE_ROWS, {keyPath:'_id'});
+      if(!db.objectStoreNames.contains(STORE_NOTIFIED)) db.createObjectStore(STORE_NOTIFIED, {keyPath:'key'});
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function saveDatasetToDB(){
+  if(!('indexedDB' in window)) return;
+  try{
+    const db = await openDB();
+    const tx = db.transaction(STORE_ROWS, 'readwrite');
+    const store = tx.objectStore(STORE_ROWS);
+    store.clear();
+    dataset.forEach(r=>{
+      store.put({
+        _id: r._id, pos_blok: r.pos_blok, no_pohon: r.no_pohon,
+        tgl_bungkus: r.tgl_bungkus.getTime(),
+        tgl_penyerbukan: r.tgl_penyerbukan ? r.tgl_penyerbukan.getTime() : null,
+        tgl_buka_bungkus: r.tgl_buka_bungkus ? r.tgl_buka_bungkus.getTime() : null,
+      });
+    });
+    return new Promise(res=>{ tx.oncomplete = ()=>res(); tx.onerror = ()=>res(); });
+  }catch(e){ /* silent: IndexedDB opsional */ }
+}
+
+async function fireNativeNotifications(){
+  if(!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const urgent = notifQueue.filter(n=> n.sev==='overdue' || n.sev==='today');
+    urgent.slice(0,10).forEach(n=>{
+      reg.showNotification(n.title, {
+        body: n.msg,
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        tag: n.title + '|' + n.msg,
+      });
+    });
+  }catch(e){ /* silent */ }
+}
+
+async function setupNotifications(){
+  const btn = document.getElementById('btn-notif');
+  const note = document.getElementById('notif-note');
+  if(!('serviceWorker' in navigator) || !('Notification' in window)){
+    note.textContent = 'Browser/HP ini belum mendukung notifikasi web. Coba buka lewat Chrome di Android.';
+    return;
+  }
+  const reg = await navigator.serviceWorker.register('sw.js');
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted'){
+    note.textContent = 'Izin notifikasi belum diberikan. Aktifkan lewat pengaturan browser lalu coba lagi.';
+    return;
+  }
+  btn.textContent = 'Notifikasi HP Aktif ✓';
+  btn.disabled = true;
+  await saveDatasetToDB();
+  try{
+    const status = await navigator.permissions.query({name:'periodic-background-sync'});
+    if(status.state === 'granted' && 'periodicSync' in reg){
+      await reg.periodicSync.register('check-polinasi', {minInterval: 6*60*60*1000});
+      note.textContent = 'Aktif: HP akan dicek berkala di latar belakang (\u2248 tiap 6 jam) meski aplikasi tidak dibuka, sesuai dukungan perangkat.';
+    } else {
+      note.textContent = 'Aktif: notifikasi akan keluar otomatis selama aplikasi ini pernah dibuka dan sempat berjalan di latar belakang. Untuk hasil terbaik, install ke layar utama HP (menu browser \u2192 "Tambahkan ke Layar Utama").';
+    }
+  }catch(e){
+    note.textContent = 'Aktif: notifikasi akan keluar otomatis saat aplikasi sempat berjalan di latar belakang. HP ini belum mendukung pengecekan latar belakang penuh.';
+  }
+  fireNativeNotifications();
+}
+document.getElementById('btn-notif').addEventListener('click', setupNotifications);
+
+// ================= DATA CONTOH (dari histori yang dikirim) =================
+// Dipakai otomatis saat halaman dibuka, tanpa perlu unggah file.
+// Tanggal-tanggal ini persis seperti contoh tabel yang dikirim, sehingga
+// beberapa pokok akan langsung "Terlambat" atau "Jatuh tempo hari ini" —
+// supaya Anda bisa langsung lihat notifikasi WA-style muncul otomatis.
+const SAMPLE_ROWS = [
+  {pos_blok:'POS 2000', varietas:'DxP Simalungun', register:'MAR-0276573', no_pohon:'BO8704D', lapangan:'72_5', kel_betina:'40.001', tgl_bungkus:'29/06/2026', polinator:'ADI', letak:'BKI'},
+  {pos_blok:'POS 2003', varietas:'DxP LaMe', register:'MAR-0276575', no_pohon:'BO9194D', lapangan:'43_5', kel_betina:'01.041', tgl_bungkus:'29/06/2026', polinator:'ARS', letak:'MKI'},
+  {pos_blok:'POS 2005A', varietas:'DxP PPKS 540', register:'MAR-0276470', no_pohon:'MA3304D', lapangan:'44_25', kel_betina:'20.007', tgl_bungkus:'27/06/2026', polinator:'ANA', letak:'BKN'},
+  {pos_blok:'POS 2005A', varietas:'DxP PPKS 540', register:'MAR-0276470', no_pohon:'MA3323D', lapangan:'45_26', kel_betina:'20.007', tgl_bungkus:'27/06/2026', polinator:'ANA', letak:'BKN'},
+  {pos_blok:'POS 2005A', varietas:'DxP SP-1 (Dumpy)', register:'MAR-0276464', no_pohon:'MA44Dy', lapangan:'67_10', kel_betina:'22.002', tgl_bungkus:'27/06/2026', polinator:'BYG', letak:'MKI'},
+];
+
+function loadSampleData(){
+  dataset = SAMPLE_ROWS.map(processRow).filter(Boolean);
+  document.getElementById('file-status').className = 'file-status';
+  document.getElementById('file-status').textContent =
+    `Menampilkan ${dataset.length} pokok dari data contoh (histori yang dikirim). Unggah file untuk mengganti dengan data Anda sendiri.`;
+  renderAll();
+  buildNotifications();
+  fireLoadToasts();
+  saveDatasetToDB();
+  fireNativeNotifications();
+}
+
+// ================= FILE HANDLING =================
+document.getElementById('file-input').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('file-status');
+  statusEl.className = 'file-status';
+  statusEl.textContent = 'Memproses "' + file.name + '"...';
+
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'binary', cellDates:true});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+      if(!rows.length){
+        statusEl.className='file-status err';
+        statusEl.textContent='File kosong atau format tidak terbaca.';
+        return;
+      }
+      const normalizedRows = rows.map(r=>{
+        const out = {};
+        Object.keys(r).forEach(k=>{
+          const mapped = HEADER_MAP[normHeader(k)];
+          if(mapped && out[mapped] === undefined) out[mapped] = r[k];
+        });
+        return out;
+      });
+
+      const processed = [];
+      let skipped = 0;
+      normalizedRows.forEach(r=>{
+        const p = processRow(r);
+        if(p) processed.push(p); else skipped++;
+      });
+
+      dataset = processed;
+      statusEl.className='file-status';
+      statusEl.textContent = `Berhasil memuat ${processed.length} pokok dari "${file.name}"` + (skipped ? ` (${skipped} baris dilewati karena Tgl Register/Bungkus kosong atau tidak terbaca).` : '.');
+
+      renderAll();
+      buildNotifications();
+      fireLoadToasts();
+      saveDatasetToDB();
+      fireNativeNotifications();
+    }catch(err){
+      statusEl.className='file-status err';
+      statusEl.textContent = 'Gagal membaca file: ' + err.message;
+    }
+  };
+  reader.readAsBinaryString(file);
+});
+
+document.getElementById('btn-sample').addEventListener('click', loadSampleData);
+
+// Muat data contoh otomatis begitu halaman dibuka — tidak perlu unggah file dulu.
+loadSampleData();
+
+document.getElementById('btn-template').addEventListener('click', function(){
+  const headers = ['Pos','Barang','ID Persil','ID Betina','Lapangan','Kel Betina','Tgl Register','PoliRegister','ID Lokasi','Tgl Penyerbukan','Tgl Buka Bungkus'];
+  const sample = [
+    ['POS 2000','xP Simalungun','MAR-0276573','BO8704D','72_5','40.001', addDays(today,-6), 'ADI','BKI','',''],
+    ['POS 2003','DxP LaMe','MAR-0276575','BO9194D','43_5','01.041', addDays(today,-20), 'ARS','MKI', addDays(today,-11), ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Polinasi');
+  XLSX.writeFile(wb, 'template_polinasi_sawit.xlsx');
+});
+
+// ================= RENDER TABLE =================
+function statusBadgeClass(s){
+  return {
+    'Menunggu Penyerbukan':'badge-wait1',
+    'Menunggu Buka Bungkus':'badge-wait2',
+    'Proses Pematangan':'badge-ripen',
+    'Siap Panen':'badge-ready',
+  }[s] || '';
+}
+function deadlineTagHtml(row){
+  const d = row.d_diff;
+  if(row.status_tahap === 'Siap Panen'){
+    return `<span class="deadline-tag" style="background:var(--ok-bg); color:var(--palm-dark);">Siap panen</span>`;
+  }
+  if(d < 0) return `<span class="deadline-tag dl-overdue">Terlambat ${Math.abs(d)} hr &middot; ${row.active_label}</span>`;
+  if(d === 0) return `<span class="deadline-tag dl-today">Jatuh tempo hari ini &middot; ${row.active_label}</span>`;
+  if(d <= 3) return `<span class="deadline-tag dl-soon">H-${d} &middot; ${row.active_label}</span>`;
+  return `<span class="deadline-tag dl-fine">${fmtDate(row.active_deadline)} &middot; ${row.active_label}</span>`;
+}
+function ripeBarHtml(row){
+  const stages = ['Menunggu Penyerbukan','Menunggu Buka Bungkus','Proses Pematangan','Siap Panen'];
+  const idx = stages.indexOf(row.status_tahap);
+  let html = '<div class="ripebar">';
+  for(let i=0;i<4;i++){
+    let cls = 'seg';
+    if(i < idx) cls += ' on';
+    else if(i === idx) cls += ' on current';
+    html += `<div class="${cls}"></div>`;
+  }
+  html += '</div>';
+  return html;
+}
+function aksiHtml(row){
+  if(row.status_tahap === 'Menunggu Penyerbukan'){
+    return `<button class="btn btn-primary btn-sm" data-action="serbuk" data-id="${row._id}">Tandai Diserbuki</button>`;
+  }
+  if(row.status_tahap === 'Menunggu Buka Bungkus'){
+    return `<button class="btn btn-ghost btn-sm" data-action="buka" data-id="${row._id}">Tandai Dibuka</button>`;
+  }
+  return `<span style="color:var(--ink-soft); font-size:11.5px;">&mdash;</span>`;
+}
+
+function getFiltered(){
+  const q = document.getElementById('search-box').value.trim().toLowerCase();
+  const statusF = document.getElementById('filter-status').value;
+  const urgentF = document.getElementById('filter-urgent').value;
+  return dataset.filter(r=>{
+    if(statusF && r.status_tahap !== statusF) return false;
+    if(urgentF === 'overdue' && !(r.d_diff < 0 && r.status_tahap !== 'Siap Panen')) return false;
+    if(urgentF === 'today' && !(r.d_diff === 0 && r.status_tahap !== 'Siap Panen')) return false;
+    if(urgentF === 'soon' && !(r.d_diff > 0 && r.d_diff <=3 && r.status_tahap !== 'Siap Panen')) return false;
+    if(q){
+      const hay = [r.pos_blok, r.no_pohon, r.register, r.polinator, r.varietas, r.kel_betina].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderAll(){
+  const hasData = dataset.length > 0;
+  document.getElementById('stats').style.display = hasData ? 'grid' : 'none';
+  document.getElementById('toolbar').style.display = hasData ? 'flex' : 'none';
+  document.getElementById('table-wrap').style.display = hasData ? 'block' : 'none';
+  document.getElementById('empty-state').style.display = hasData ? 'none' : 'block';
+  if(!hasData) return;
+
+  document.getElementById('s-total').textContent = dataset.length;
+  document.getElementById('s-wait1').textContent = dataset.filter(r=>r.status_tahap==='Menunggu Penyerbukan').length;
+  document.getElementById('s-wait2').textContent = dataset.filter(r=>r.status_tahap==='Menunggu Buka Bungkus').length;
+  document.getElementById('s-ripen').textContent = dataset.filter(r=>r.status_tahap==='Proses Pematangan').length;
+  document.getElementById('s-ready').textContent = dataset.filter(r=>r.status_tahap==='Siap Panen').length;
+
+  renderTable();
+}
+
+function renderTable(){
+  const rows = getFiltered();
+  const tbody = document.getElementById('table-body');
+  if(!rows.length){
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--ink-soft);">Tidak ada data yang cocok dengan filter.</td></tr>`;
+    return;
+  }
+  rows.sort((a,b)=>{
+    if(a.status_tahap==='Siap Panen' && b.status_tahap!=='Siap Panen') return 1;
+    if(b.status_tahap==='Siap Panen' && a.status_tahap!=='Siap Panen') return -1;
+    return a.d_diff - b.d_diff;
+  });
+  tbody.innerHTML = rows.map(r=>`
+    <tr>
+      <td>${escapeHtml(r.pos_blok)}</td>
+      <td class="mono">${escapeHtml(r.no_pohon)}</td>
+      <td>${escapeHtml(r.varietas)}</td>
+      <td class="mono">${escapeHtml(r.register)}</td>
+      <td>${escapeHtml(r.lapangan)}</td>
+      <td class="mono">${escapeHtml(r.kel_betina)}</td>
+      <td>${escapeHtml(r.polinator)}</td>
+      <td class="mono">${fmtDate(r.tgl_bungkus)}</td>
+      <td><span class="badge ${statusBadgeClass(r.status_tahap)}">${r.status_tahap}</span></td>
+      <td>${deadlineTagHtml(r)}</td>
+      <td>${ripeBarHtml(r)}</td>
+      <td>${aksiHtml(r)}</td>
+    </tr>
+  `).join('');
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+['search-box','filter-status','filter-urgent'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+  document.getElementById(id).addEventListener('change', renderTable);
+});
+
+// Tombol "Tandai Diserbuki" / "Tandai Dibuka" di setiap baris
+document.getElementById('table-body').addEventListener('click', function(e){
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const row = dataset.find(r => r._id === btn.dataset.id);
+  if(!row) return;
+  if(btn.dataset.action === 'serbuk'){
+    row.tgl_penyerbukan = new Date(today);
+  } else if(btn.dataset.action === 'buka'){
+    row.tgl_buka_bungkus = new Date(today);
+  }
+  recomputeRow(row);
+  renderAll();
+  buildNotifications();
+  saveDatasetToDB();
+});
+
+// ================= NOTIFICATIONS =================
+function buildNotifications(){
+  notifQueue = [];
+  dataset.forEach(r=>{
+    if(r.status_tahap === 'Siap Panen'){
+      notifQueue.push({
+        sev:'ready', row:r,
+        title: `${r.pos_blok} / ${r.no_pohon}`,
+        msg: `Sudah siap panen (estimasi ${fmtDate(r.tgl_panen_estimasi)}).`,
+        sortKey: -1000 + r.d_diff,
+      });
+      return;
+    }
+    const d = r.d_diff;
+    if(d < 0){
+      notifQueue.push({
+        sev:'overdue', row:r,
+        title: `${r.pos_blok} / ${r.no_pohon}`,
+        msg: `Terlambat ${Math.abs(d)} hari untuk ${r.active_label.toLowerCase()} (batas ${fmtDate(r.active_deadline)}).`,
+        sortKey: d,
+      });
+    } else if(d === 0){
+      notifQueue.push({
+        sev:'today', row:r,
+        title: `${r.pos_blok} / ${r.no_pohon}`,
+        msg: `${r.active_label} jatuh tempo hari ini.`,
+        sortKey: d,
+      });
+    } else if(d <= 3){
+      notifQueue.push({
+        sev:'soon', row:r,
+        title: `${r.pos_blok} / ${r.no_pohon}`,
+        msg: `H-${d} menuju batas ${r.active_label.toLowerCase()} (${fmtDate(r.active_deadline)}).`,
+        sortKey: d,
+      });
+    }
+  });
+  notifQueue.sort((a,b)=>a.sortKey - b.sortKey);
+  renderBell();
+}
+
+function sevMeta(sev){
+  return {
+    overdue:{cls:'sev-overdue', icon:'!', label:'Terlambat'},
+    today:{cls:'sev-today', icon:'\u23F0', label:'Hari ini'},
+    soon:{cls:'sev-soon', icon:'\u26A0', label:'Segera'},
+    ready:{cls:'sev-ready', icon:'\u2713', label:'Siap panen'},
+  }[sev];
+}
+
+function renderBell(){
+  const badge = document.getElementById('bell-badge');
+  const urgentCount = notifQueue.filter(n=>n.sev==='overdue' || n.sev==='today').length;
+  if(notifQueue.length){
+    badge.style.display='flex';
+    badge.textContent = notifQueue.length > 99 ? '99+' : notifQueue.length;
+  } else {
+    badge.style.display='none';
+  }
+  document.getElementById('bp-count').textContent = notifQueue.length + ' item' + (urgentCount? ` \u00b7 ${urgentCount} mendesak`:'');
+
+  const list = document.getElementById('notif-list');
+  if(!notifQueue.length){
+    list.innerHTML = `<div class="empty-notif">Tidak ada notifikasi saat ini. Semua tahap dalam jadwal.</div>`;
+    return;
+  }
+  list.innerHTML = notifQueue.map(n=>{
+    const m = sevMeta(n.sev);
+    return `<div class="notif-item">
+      <div class="notif-dot ${m.cls}">${m.icon}</div>
+      <div class="notif-body">
+        <div class="notif-title"><span>${escapeHtml(n.title)}</span><span class="time">${m.label}</span></div>
+        <div class="notif-msg">${escapeHtml(n.msg)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('bell-btn').addEventListener('click', function(e){
+  e.stopPropagation();
+  document.getElementById('bell-panel').classList.toggle('open');
+});
+document.addEventListener('click', function(e){
+  const panel = document.getElementById('bell-panel');
+  if(!panel.contains(e.target) && e.target.id !== 'bell-btn'){
+    panel.classList.remove('open');
+  }
+});
+
+// ================= TOASTS (WhatsApp-style popups) =================
+function showToast(n){
+  const m = sevMeta(n.sev);
+  const stack = document.getElementById('toast-stack');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `
+    <div class="t-icon ${m.cls}">${m.icon}</div>
+    <div class="t-body">
+      <div class="t-title">${escapeHtml(n.title)}</div>
+      <div class="t-msg">${escapeHtml(n.msg)}</div>
+    </div>
+    <button class="t-close">&times;</button>
+  `;
+  el.querySelector('.t-close').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    dismissToast(el);
+  });
+  el.addEventListener('click', ()=>{
+    document.getElementById('bell-panel').classList.add('open');
+  });
+  stack.appendChild(el);
+  setTimeout(()=>dismissToast(el), TOAST_AUTOCLOSE_MS);
+}
+function dismissToast(el){
+  if(!el.parentNode) return;
+  el.classList.add('leaving');
+  setTimeout(()=>el.remove(), 260);
+}
+
+function fireLoadToasts(){
+  document.getElementById('toast-stack').innerHTML = '';
+  const priority = notifQueue.filter(n=> n.sev==='overdue' || n.sev==='today');
+  const toShow = priority.length ? priority : notifQueue.slice(0,3);
+  toShow.slice(0, MAX_TOASTS_ON_LOAD).forEach((n, i)=>{
+    setTimeout(()=>showToast(n), i*350);
+  });
+  const extra = toShow.length - MAX_TOASTS_ON_LOAD;
+  if(extra > 0){
+    setTimeout(()=>{
+      showToast({sev:'soon', title:'Notifikasi lainnya', msg:`+${extra} pokok lain juga butuh perhatian. Buka lonceng di kanan atas untuk lihat semua.`});
+    }, MAX_TOASTS_ON_LOAD*350);
+  }
+}
+</script>
+</body>
+</html>
